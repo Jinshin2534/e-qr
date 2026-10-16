@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>絵QR — 壊していい量だけ描けるQRエディタ</title>
+  <meta name="description" content="QRコードのエラー訂正の余裕ぶんだけ絵を描き込めるエディタ。毎ストローク jsQR に読ませ、読めなくなる手前で止まる。" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><rect width='8' height='8' fill='%23fbf7ef'/><path d='M0 0h3v3H0zM5 0h3v3H5zM0 5h3v3H0z' fill='%23241c15'/><path d='M5 5h2v2H5z' fill='%23c8203c'/></svg>" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>絵QR <small>e-qr</small></h1>
+    <p class="lede">QRコードの誤り訂正の<b>余裕ぶんだけ</b>絵を描き込めるエディタ。読めなくなる手前で筆が止まります。</p>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="canvas-wrap">
+        <canvas id="board" aria-label="QRコードの編集面"></canvas>
+      </div>
+      <div class="legend">
+        <label class="toggle"><input type="checkbox" id="showCost" checked /> 余裕を重ねて見る</label>
+        <span class="key"><i class="k-free"></i>タダで塗れる</span>
+        <span class="key"><i class="k-cost"></i>予算を1つ使う</span>
+        <span class="key"><i class="k-full"></i>予算切れ</span>
+        <span class="key"><i class="k-lock"></i>明暗を変えられない</span>
+      </div>
+      <p id="toast" class="toast" role="status" aria-live="polite"></p>
+    </section>
+
+    <aside class="panel">
+      <form id="contentForm" class="card">
+        <h2>中身</h2>
+        <input id="text" type="text" value="https://e-qr.vercel.app" autocomplete="off" spellcheck="false" aria-label="QRに入れる文字" />
+        <div class="row">
+          <div class="seg" role="radiogroup" aria-label="誤り訂正レベル">
+            <label><input type="radio" name="ecl" value="L" />L</label>
+            <label><input type="radio" name="ecl" value="M" />M</label>
+            <label><input type="radio" name="ecl" value="Q" />Q</label>
+            <label><input type="radio" name="ecl" value="H" checked />H</label>
+          </div>
+          <button type="submit">作り直す</button>
+        </div>
+        <p id="qrInfo" class="note"></p>
+        <p id="formError" class="error" hidden></p>
+      </form>
+
+      <div class="card">
+        <h2>筆</h2>
+        <div id="swatches" class="swatches"></div>
+        <div class="row">
+          <label class="picker">好きな色 <input id="color" type="color" value="#c8203c" /></label>
+          <span id="colorClass" class="badge"></span>
+        </div>
+        <div class="row">
+          <div class="seg" role="radiogroup" aria-label="筆の太さ">
+            <label><input type="radio" name="size" value="1" checked />1</label>
+            <label><input type="radio" name="size" value="2" />2</label>
+            <label><input type="radio" name="size" value="3" />3</label>
+          </div>
+          <label class="toggle"><input type="checkbox" id="eraser" /> 消しゴム</label>
+        </div>
+        <div class="row">
+          <button id="undo" type="button">取り消し</button>
+          <button id="sample" type="button">お手本を描く</button>
+          <button id="clear" type="button">まっさらに</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>壊していい量</h2>
+        <p class="big"><span id="left">–</span><small> 符号語ぶん残り</small></p>
+        <div id="bars" class="bars"></div>
+        <p class="note">各ブロックの棒: 塗りで壊した符号語 / <b>止める線</b>(理論限界の半分) / 理論限界 t。</p>
+      </div>
+
+      <div class="card">
+        <h2>jsQR に読ませた結果</h2>
+        <ul class="checks">
+          <li id="chkClean"><span class="mark">…</span> 書き出す画像そのまま</li>
+          <li id="chkHarsh"><span class="mark">…</span> 縮小・ノイズ・ぼかし・ムラを足した画像 <span id="harshCount"></span></li>
+        </ul>
+        <button id="export" type="button" class="primary" disabled>PNG で書き出す</button>
+        <p id="exportWhy" class="note"></p>
+      </div>
+
+      <details class="card honest">
+        <summary>なぜ止まるのか・何を保証しないか</summary>
+        <p>QRのデータは8ビットの<b>符号語</b>に区切られ、いくつかの<b>ブロック</b>に分けて Reed–Solomon 符号で守られています。1ブロックで直せるのは、どこが壊れたか分からない誤りなら <b>t = ⌊(EC符号語数 − p)/2⌋</b> 個まで(p は小さい版で誤訂正よけに取っておく予備)。</p>
+        <p>読み取り機は色を見ず、明るさだけで白黒に分けます。だから<b>元のモジュールと同じ明暗の色なら何色で塗ってもタダ</b>。明暗を逆にしたモジュールだけが、その符号語を「壊した」ことになります。同じ符号語の中なら何ビット壊しても1つと数えます。灰色のような真ん中の明るさは、どちらに転ぶか分からないので常に壊したとみなします。</p>
+        <p>このエディタは各ブロックで <b>t の半分</b>まで壊したところで筆を止めます。残り半分は、印刷のにじみ・カメラのボケ・照明ムラが勝手に足してくる誤りのための取り置きです。テストでは、t ちょうどまで描いた絵は強いボケを足すとほぼ読めなくなり、半分で止めた絵は読めました。</p>
+        <p>ファインダ(角の3つの四角)・タイミング・位置合わせ・形式情報は、誤り訂正の外側にあるので明暗は変えられません(同じ明暗の色なら塗れます)。</p>
+        <p><b>保証しないこと:</b> 実際のスマホのカメラで読めるかは、端末・アプリ・印刷・距離で変わります。jsQR は数ある復号器の1つにすぎません。書き出したら、使う前に手元の端末で読めるか必ず確かめてください。</p>
+      </details>
+    </aside>
+  </main>
+
+  <footer class="foot">ブラウザの中だけで動きます。入力した文字も絵もどこにも送りません。</footer>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
